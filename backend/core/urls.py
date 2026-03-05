@@ -3,6 +3,7 @@ Root URL configuration for ghana-tax-system backend.
 """
 
 from django.urls import path, include
+from apps.reports.urls import traders_urlpatterns
 
 urlpatterns = [
     # Auth endpoints
@@ -10,8 +11,10 @@ urlpatterns = [
     # Registration & TIN
     path("api/", include("apps.registration.urls")),
     path("api/tin/", include("apps.tin.urls")),
-    # Admin-facing APIs
+    # Reports + Traders
     path("api/reports/", include("apps.reports.urls")),
+    path("api/traders/", include((traders_urlpatterns, "traders"))),
+    # Audit logs + Admin user management
     path("api/audit-logs/", include("apps.audit.urls")),
     path("api/admin/", include("apps.auth_app.admin_urls")),
     # USSD webhook
