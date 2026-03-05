@@ -85,7 +85,7 @@ class TradersListView(APIView):
         if not qs.is_valid():
             return error_response("Invalid query parameters.", errors=qs.errors)
 
-        result = _service.get_traders_list(qs.validated_data)
+        result = _service.get_traders_list(qs.validated_data, actor=request.admin)
         return paginated_response(
             data=result["traders"],
             total=result["total"],
@@ -103,7 +103,7 @@ class TraderDetailView(APIView):
     permission_classes = [IsTaxAdmin]
 
     def get(self, request: Request, trader_id: str):
-        trader = _service.get_trader_detail(trader_id)
+        trader = _service.get_trader_detail(trader_id, actor=request.admin)
         if not trader:
             return error_response("Trader not found.", http_status=404)
         return success_response(data=trader, message="Trader retrieved.")

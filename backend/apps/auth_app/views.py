@@ -89,7 +89,7 @@ class AdminUserListCreateView(APIView):
 
     def get(self, request):
         """GET /api/admin/users — list all admins."""
-        admins = _auth_service.list_admins()
+        admins = _auth_service.list_admins(actor=request.admin)
         return success_response(data=admins)
 
     def post(self, request):

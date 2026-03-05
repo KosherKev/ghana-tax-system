@@ -244,7 +244,7 @@ See `PHASES.md` for the full build plan and `LOG.md` for completed work.
 | 9 — Trader Portal (5 pages) | ✅ Complete |
 | 10 — Admin Portal (6 pages) | ✅ Complete |
 | 11 — Integration & Wiring | ✅ Complete |
-| 12 — Security + Performance | ⏳ Pending |
+| 12 — Security + Performance | ✅ Complete |
 
 ---
 

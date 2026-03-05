@@ -222,7 +222,10 @@ class AuthService:
 
         return updated
 
-    def list_admins(self) -> list[dict]:
+    def list_admins(self, actor: dict = None) -> list[dict]:
+        """List all admin accounts. Phase 12: optional service-layer RBAC guard."""
+        if actor is not None and actor.get("role") != "SYS_ADMIN":
+            raise PermissionDenied("SYS_ADMIN role required to list admin accounts.")
         return _admin_repo.list_all()
 
     def get_me(self, admin_id: str) -> Optional[dict]:

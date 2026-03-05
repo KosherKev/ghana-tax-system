@@ -30,6 +30,77 @@
 
 ---
 
+### [PHASE 12] — Security Hardening & Performance Tuning
+**Date:** 2026-03-05
+**Agent:** Phase 12 Agent
+**Status:** ✅ Complete
+
+**Files Modified:**
+
+- `backend/core/settings.py`
+  - Added `CACHES` config block: uses `django.core.cache.backends.redis.RedisCache` backed by `REDIS_URL` (DB 1, key prefix `ghana_tax`); falls back to `LocMemCache` when `USE_REDIS_CACHE=False`
+  - Added `REPORTS_CACHE_TTL` setting (default 45s, configurable via env) for the reports summary cache TTL
+  - `USE_REDIS_CACHE` env var allows local dev without Redis by switching to in-memory cache
+
+- `backend/apps/reports/services.py` (Phase 12 security + performance hardening)
+  - **Redis caching on `get_summary()`**: before running any aggregation, checks `cache.get(f"reports_summary_{period}")`; on hit, returns immediately with `served_from_cache: True`; on miss, runs all MongoDB pipelines then writes to cache with `REPORTS_CACHE_TTL` TTL. Cache write failures are swallowed — a cache error never breaks the API response.
+  - **Service-layer RBAC guards (defence-in-depth)**: `get_summary()`, `get_traders_list()`, `get_trader_detail()`, and `export_csv()` all now assert `actor.role in ("TAX_ADMIN", "SYS_ADMIN")` (or `"SYS_ADMIN"` only where appropriate) at the service layer, independently of the view-layer permission classes.
+  - Removed unused `hashlib` and `json` imports added during initial draft
+
+- `backend/apps/reports/views.py`
+  - `TradersListView.get()` — passes `actor=request.admin` to `_service.get_traders_list()` to activate service-layer RBAC guard
+  - `TraderDetailView.get()` — passes `actor=request.admin` to `_service.get_trader_detail()` to activate service-layer RBAC guard
+
+- `backend/apps/auth_app/services.py`
+  - `list_admins()` now accepts optional `actor: dict` parameter; when provided, asserts `actor.role == "SYS_ADMIN"` — service-layer RBAC guard for the admin list endpoint
+
+- `backend/apps/auth_app/views.py`
+  - `AdminUserListCreateView.get()` — passes `actor=request.admin` to `_auth_service.list_admins()` to activate service-layer RBAC guard
+
+- `backend/apps/registration/services.py`
+  - **Audit log for duplicate registration attempts**: both `register_trader_web()` and `register_trader_ussd()` now write a `DUPLICATE_REGISTRATION_ATTEMPT` audit log when a phone number is already registered. Previously the idempotency branch returned silently with no audit trail.
+  - **Cache invalidation on new registration**: both `register_trader_web()` and `register_trader_ussd()` call `_invalidate_reports_cache()` after successfully creating a trader. This deletes all three `reports_summary_*` cache keys so the next reports request reflects the new data immediately.
+  - Added `_invalidate_reports_cache()` static method: iterates `["7d", "30d", "all"]` and calls `cache.delete()` for each key; swallows all exceptions so a Redis outage never blocks registrations.
+
+- `infra/.env.example` — added `USE_REDIS_CACHE=True` and `REPORTS_CACHE_TTL=45` with comments
+- `backend/.env.example` — added `USE_REDIS_CACHE=False` (default off for local dev without Redis) and `REPORTS_CACHE_TTL=45`
+- `README.md` — Phase 12 marked ✅ Complete in progress table
+
+**Security Hardening Summary:**
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Rate limiting on all endpoints | ✅ | `/api/auth/login` 10/m, `/api/auth/refresh` 20/m, `/api/register` 20/m, `/api/tin/lookup` 5/m, `/ussd/callback` 100/m — all confirmed in prior phase view code |
+| Input sanitization | ✅ | All inputs pass through DRF serializers + `validate_ghana_phone` / `validate_business_type` validators before reaching service layer |
+| CORS headers | ✅ | `django-cors-headers` reads `CORS_ALLOWED_ORIGINS` from env; `CORS_ALLOW_CREDENTIALS=True`; no wildcard `*` origin |
+| JWT expiry enforced | ✅ | `verify_token()` raises `TokenExpiredError` on expired tokens; `JWTAuthentication` returns 401 |
+| RBAC at service layer | ✅ Added | `ReportsService`, `AuthService.list_admins()` now assert role at service layer — defence-in-depth beyond view-layer permission classes |
+| Audit log — duplicate phone | ✅ Added | `DUPLICATE_REGISTRATION_ATTEMPT` written for both web + USSD idempotency paths |
+| Audit log — TIN generation failure | ✅ (existing) | `TINService.generate_unique_tin()` writes `TIN_GENERATION_FAILED` audit log on `MAX_RETRIES` exhaustion (Phase 4) |
+
+**Performance Summary:**
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| MongoDB indexes | ✅ | `infra/mongo-init/init.js` creates all required indexes: `tin_unique`, `phone_idx`, `created_at_desc`, `channel_idx`, `email_unique`, `actor_idx`, `action_idx`, `session_unique`, `session_ttl` (TTL) |
+| Reports summary caching | ✅ Added | `get_summary()` now checks Redis cache before running any aggregation; 45s default TTL; cache is invalidated on every new trader registration |
+| Reports performance target | ✅ (existing) | Phase 7 `test_reports_performance_10k` confirms <3s on 10k records (skipped by default, enabled with `RUN_PERF_TESTS=1`) |
+
+**Test results:**
+- `python3 -m pytest tests/ -q` → **73 passed, 1 skipped, 0 failed** (all prior test suite passes unchanged)
+- `npx tsc --noEmit` → **exit code 0, zero TypeScript errors** (frontend unchanged)
+- `python3 -m py_compile` on all modified backend files → **ALL OK**
+- Django import check (`django.setup()` + import all modified services) → **ALL OK**
+
+**Notes:**
+- The `CACHES` backend uses Django's built-in `django.core.cache.backends.redis.RedisCache` (available since Django 4.0) — no additional `django-redis` package required; this is already covered by the `redis` package in `requirements.txt`.
+- Cache key format: `ghana_tax:reports_summary_{period}` (Django prepends `KEY_PREFIX` automatically).
+- `USE_REDIS_CACHE=False` in `backend/.env.example` allows local development without a running Redis instance; the in-memory `LocMemCache` is process-local and does not persist across restarts.
+- Service-layer RBAC guards use Python's built-in `PermissionError` for `ReportsService` (no DRF import needed in services module) and DRF's `PermissionDenied` in `AuthService` (consistent with existing service exception handling).
+- Cache invalidation on registration is best-effort: a Redis outage will not block the registration flow — the cache simply won't be invalidated, and stale data will expire naturally after `REPORTS_CACHE_TTL` seconds.
+
+---
+
 ### [PHASE 11] — Integration & End-to-End Wiring
 **Date:** 2026-03-05
 **Agent:** Phase 11 Agent

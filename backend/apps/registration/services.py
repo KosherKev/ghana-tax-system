@@ -47,6 +47,19 @@ class RegistrationService:
         existing = _trader_repo.find_by_phone(phone)
         if existing:
             logger.info("Idempotent registration for phone %s — returning existing TIN.", phone)
+            # Phase 12: audit the duplicate attempt for traceability
+            _audit_repo.log({
+                "action": "DUPLICATE_REGISTRATION_ATTEMPT",
+                "entity_type": "trader",
+                "entity_id": existing.get("trader_id", ""),
+                "actor_type": "system",
+                "channel": "web",
+                "details": {
+                    "phone_number": phone,
+                    "existing_tin": existing.get("tin_number"),
+                    "ip_address": ip_address,
+                },
+            })
             return {
                 "tin_number": existing["tin_number"],
                 "trader_id": existing["trader_id"],
@@ -108,6 +121,9 @@ class RegistrationService:
             },
         })
 
+        # ── Phase 12: bust reports summary cache on new registration ─────────
+        self._invalidate_reports_cache()
+
         # ── 6. SMS stub ───────────────────────────────────────────────────────
         sms_status = self._send_tin_sms_stub(phone, tin_number, name)
 
@@ -137,6 +153,18 @@ class RegistrationService:
         # ── Idempotency ───────────────────────────────────────────────────────
         existing = _trader_repo.find_by_phone(normalise_phone(msisdn))
         if existing:
+            # Phase 12: audit the duplicate attempt for USSD channel
+            _audit_repo.log({
+                "action": "DUPLICATE_REGISTRATION_ATTEMPT",
+                "entity_type": "trader",
+                "entity_id": existing.get("trader_id", ""),
+                "actor_type": "system",
+                "channel": "ussd",
+                "details": {
+                    "phone_number": msisdn,
+                    "existing_tin": existing.get("tin_number"),
+                },
+            })
             return {
                 "tin_number": existing["tin_number"],
                 "trader_id": existing["trader_id"],
@@ -192,6 +220,9 @@ class RegistrationService:
             },
         })
 
+        # Phase 12: bust reports summary cache on new USSD registration
+        self._invalidate_reports_cache()
+
         sms_status = self._send_tin_sms_stub(msisdn, tin_number, validated["name"])
         return {
             "tin_number": tin_number,
@@ -199,6 +230,19 @@ class RegistrationService:
             "name": validated["name"],
             "sms_status": sms_status,
         }
+
+    @staticmethod
+    def _invalidate_reports_cache() -> None:
+        """
+        Bust the Redis-cached reports summary so the next request reflects
+        the newly created trader. Swallows all errors — cache miss is acceptable.
+        """
+        try:
+            from django.core.cache import cache
+            for period in ("7d", "30d", "all"):
+                cache.delete(f"reports_summary_{period}")
+        except Exception as exc:
+            logger.debug("Reports cache invalidation skipped: %s", exc)
 
     @staticmethod
     def _send_tin_sms_stub(phone: str, tin_number: str, name: str) -> str:

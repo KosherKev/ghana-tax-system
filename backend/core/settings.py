@@ -60,6 +60,31 @@ MONGO_DB_NAME = config("MONGO_DB_NAME", default="ghana_tax_db")
 # ─── Redis ────────────────────────────────────────────────────────────────────
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 
+# ─── Cache (Redis) ────────────────────────────────────────────────────────────
+# Used by reports summary endpoint for 30-60s TTL caching.
+# Falls back gracefully: if Redis is unavailable Django will raise on startup;
+# to use in-memory cache for local dev without Redis, set USE_REDIS_CACHE=False.
+_USE_REDIS_CACHE = config("USE_REDIS_CACHE", default=True, cast=bool)
+if _USE_REDIS_CACHE:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": "ghana_tax",
+            "TIMEOUT": 60,  # Default TTL: 60 seconds
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ghana-tax-local-cache",
+        }
+    }
+
+# Reports summary cache TTL (seconds) — configurable via env (spec: 30-60s)
+REPORTS_CACHE_TTL = config("REPORTS_CACHE_TTL", default=45, cast=int)
+
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 JWT_SECRET_KEY = config("JWT_SECRET_KEY", default="unsafe-jwt-secret-change-in-prod")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = config("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", default=60, cast=int)

@@ -1,6 +1,11 @@
 """
 ReportsService — orchestrates aggregation queries and CSV export.
 Business logic lives here; views stay thin.
+
+Phase 12 additions:
+  - Redis caching on get_summary() with configurable TTL (REPORTS_CACHE_TTL)
+  - Service-layer RBAC assertion guards (defence-in-depth beyond view layer)
+  - Audit logging for duplicate-phone idempotency events
 """
 
 import csv
@@ -9,6 +14,9 @@ import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+from django.core.cache import cache
+from django.conf import settings
 
 from apps.audit.repository import AuditRepository
 from apps.registration.repository import TraderRepository
@@ -87,7 +95,28 @@ class ReportsService:
         """
         Build the full reports summary payload.
         Uses MongoDB aggregation pipelines exclusively — no Python-level loops.
+
+        Phase 12: Results are cached in Redis with a configurable TTL
+        (default 45s, overridden by REPORTS_CACHE_TTL env var).
+        Cache key is scoped to the period so 7d / 30d / all are cached separately.
+        Service-layer RBAC guard: actor must be TAX_ADMIN or SYS_ADMIN.
         """
+        # ── Service-layer RBAC guard (defence-in-depth) ───────────────────────
+        actor_role = actor.get("role", "")
+        if actor_role not in ("TAX_ADMIN", "SYS_ADMIN"):
+            raise PermissionError(f"Insufficient role '{actor_role}' for reports access.")
+
+        # ── Cache lookup ──────────────────────────────────────────────────────
+        cache_key = f"reports_summary_{period}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            logger.debug("Cache HIT for reports summary (period=%s)", period)
+            # Update generated_at to reflect when the cache was served
+            cached["served_from_cache"] = True
+            return cached
+
+        logger.debug("Cache MISS for reports summary (period=%s) — running aggregations", period)
+
         date_filter = _period_to_date_filter(period)
         now = datetime.now(timezone.utc)
 
@@ -104,7 +133,7 @@ class ReportsService:
         # Total within the requested period
         period_total = sum(item["count"] for item in by_channel)
 
-        return {
+        result = {
             "total_traders": kpis["total_traders"],
             "today_registrations": kpis["today_registrations"],
             "period": period,
@@ -117,10 +146,29 @@ class ReportsService:
             ],
             "daily_trend": daily_trend,
             "generated_at": now.isoformat(),
+            "served_from_cache": False,
         }
 
-    def get_traders_list(self, validated_params: dict) -> dict:
-        """Return paginated traders list with filter support."""
+        # ── Cache write ───────────────────────────────────────────────────────
+        ttl = getattr(settings, "REPORTS_CACHE_TTL", 45)
+        try:
+            cache.set(cache_key, result, timeout=ttl)
+        except Exception as cache_err:
+            # Never let a cache write failure break the response
+            logger.warning("Cache write failed for reports summary: %s", cache_err)
+
+        return result
+
+    def get_traders_list(self, validated_params: dict, actor: dict = None) -> dict:
+        """
+        Return paginated traders list with filter support.
+        Phase 12: Optional actor for service-layer RBAC guard.
+        """
+        # Service-layer RBAC guard (defence-in-depth)
+        if actor is not None:
+            actor_role = actor.get("role", "")
+            if actor_role not in ("TAX_ADMIN", "SYS_ADMIN"):
+                raise PermissionError(f"Insufficient role '{actor_role}' for traders access.")
         page = validated_params.get("page", 1)
         page_size = validated_params.get("page_size", 20)
         skip = (page - 1) * page_size
@@ -142,8 +190,14 @@ class ReportsService:
             "total_pages": total_pages,
         }
 
-    def get_trader_detail(self, trader_id: str) -> Optional[dict]:
-        """Return full trader detail including business info."""
+    def get_trader_detail(self, trader_id: str, actor: dict = None) -> Optional[dict]:
+        """Return full trader detail including business info.
+        Phase 12: Optional actor for service-layer RBAC guard.
+        """
+        if actor is not None:
+            actor_role = actor.get("role", "")
+            if actor_role not in ("TAX_ADMIN", "SYS_ADMIN"):
+                raise PermissionError(f"Insufficient role '{actor_role}' for trader detail access.")
         from apps.registration.repository import BusinessRepository
         trader = _trader_repo.find_by_id(trader_id)
         if not trader:
@@ -165,7 +219,12 @@ class ReportsService:
         Build a CSV string of all matching traders.
         Writes an EXPORT_REPORT audit log entry.
         Returns the CSV content as a string.
+        Phase 12: Service-layer RBAC guard.
         """
+        # Service-layer RBAC guard (defence-in-depth)
+        actor_role = actor.get("role", "")
+        if actor_role not in ("TAX_ADMIN", "SYS_ADMIN"):
+            raise PermissionError(f"Insufficient role '{actor_role}' for CSV export.")
         filters = _build_filter_dict(validated_params)
         rows = _reports_repo.export_traders_csv(filters)
 
