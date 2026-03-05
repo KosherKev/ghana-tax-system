@@ -22,11 +22,14 @@ class AdminRepository:
 
     def find_by_email(self, email: str) -> Optional[dict]:
         """Return admin document by email (case-insensitive) or None."""
-        return self._col().find_one({"email": {"$regex": f"^{email}$", "$options": "i"}})
+        return self._col().find_one(
+            {"email": {"$regex": f"^{email}$", "$options": "i"}},
+            {"_id": 0},
+        )
 
     def find_by_id(self, admin_id: str) -> Optional[dict]:
         """Return admin document by admin_id (uuid string) or None."""
-        return self._col().find_one({"admin_id": admin_id})
+        return self._col().find_one({"admin_id": admin_id}, {"_id": 0})
 
     def list_all(self) -> list[dict]:
         """Return all admin documents, newest first, passwords excluded."""
