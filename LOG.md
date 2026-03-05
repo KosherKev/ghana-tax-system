@@ -30,6 +30,34 @@
 
 ---
 
+### [PHASE 6] — Backend: Reports, Audit & Admin APIs
+**Date:** 2026-03-05
+**Agent:** Phase 6 Agent
+**Status:** ✅ Complete
+
+**Files Created:**
+- `backend/apps/reports/serializers.py` — ReportsSummaryQuerySerializer (period choice), ReportsExportQuerySerializer (all filter params), TradersListQuerySerializer (channel/business_type/region/district/date_from/date_to/search/page/page_size)
+- `backend/apps/reports/services.py` — ReportsService: get_summary (all aggregations, period→date_filter, KPI totals, channel/business-type/region breakdowns, daily trend), get_traders_list (paginated with filters), get_trader_detail (with business join), export_csv (CSV string via io.StringIO, writes EXPORT_REPORT audit log); helpers _period_to_date_filter, _build_filter_dict, CSV_COLUMNS constant
+- `backend/apps/reports/views.py` — ReportsSummaryView (GET /api/reports/summary, IsTaxAdmin), ReportsExportView (GET /api/reports/export, returns HttpResponse CSV attachment), TradersListView (GET /api/traders, paginated_response), TraderDetailView (GET /api/traders/<trader_id>)
+- `backend/apps/reports/urls.py` — reports_urlpatterns (/summary, /export) + traders_urlpatterns (/, /<trader_id>) exported separately so core/urls.py can mount each at the correct prefix
+- `backend/apps/audit/serializers.py` — AuditLogQuerySerializer (action/actor_id/date_from/date_to/page/page_size)
+- `backend/apps/audit/views.py` — AuditLogListView (GET /api/audit-logs, IsSysAdmin, paginated, datetime serialised to ISO string)
+- `backend/apps/audit/urls.py` — URL routing for GET /api/audit-logs
+
+**Files Modified:**
+- `backend/core/urls.py` — added `path("api/traders/", include((traders_urlpatterns, "traders")))` so GET /api/traders and GET /api/traders/<id> resolve correctly; import added for traders_urlpatterns
+
+**Notes:**
+- All 8 files pass py_compile and full Django import check with zero errors.
+- ReportsService uses only ReportsRepository aggregation pipelines — no Python-level loops over result sets.
+- _period_to_date_filter: '7d'→$gte now-7d, '30d'→$gte now-30d, 'all'→None (no date filter added to query).
+- Export CSV uses io.StringIO + csv.writer; datetime fields formatted as "YYYY-MM-DD HH:MM:SS"; Content-Disposition triggers browser download.
+- traders_urlpatterns exported as a named module-level list so core/urls.py can include them at /api/traders/ without a second urls.py file.
+- Audit log datetime fields coerced to ISO string in the view before returning (MongoDB stores as datetime objects).
+- EXPORT_REPORT audit log includes filter dict and row_count for traceability.
+
+---
+
 ### [PHASE 5] — Backend: USSD Gateway Module
 **Date:** 2026-03-05
 **Agent:** Phase 5 Agent
