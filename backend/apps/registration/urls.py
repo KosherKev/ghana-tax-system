@@ -6,5 +6,5 @@ from django.urls import path
 from apps.registration.views import RegisterTraderView
 
 urlpatterns = [
-    path("register", RegisterTraderView.as_view(), name="register-trader"),
+    path("register/", RegisterTraderView.as_view(), name="register-trader"),
 ]

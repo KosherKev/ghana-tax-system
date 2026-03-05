@@ -60,7 +60,7 @@ api.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      originalRequest.url !== "/api/auth/refresh"
+      originalRequest.url !== "/api/auth/refresh/"
     ) {
       const { refreshToken, setAccessToken, clearAuth } = useAuthStore.getState();
 
@@ -87,7 +87,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post(`${BASE_URL}/api/auth/refresh`, {
+        const { data } = await axios.post(`${BASE_URL}/api/auth/refresh/`, {
           refresh: refreshToken,
         });
         const newAccessToken: string = data.access;

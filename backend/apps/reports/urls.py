@@ -13,14 +13,14 @@ from apps.reports.views import (
 
 # These are mounted at /api/reports/ via core/urls.py
 reports_urlpatterns = [
-    path("summary", ReportsSummaryView.as_view(), name="reports-summary"),
-    path("export", ReportsExportView.as_view(), name="reports-export"),
+    path("summary/", ReportsSummaryView.as_view(), name="reports-summary"),
+    path("export/", ReportsExportView.as_view(), name="reports-export"),
 ]
 
 # These are mounted at /api/traders/ via core/urls.py
 traders_urlpatterns = [
     path("", TradersListView.as_view(), name="traders-list"),
-    path("<str:trader_id>", TraderDetailView.as_view(), name="trader-detail"),
+    path("<str:trader_id>/", TraderDetailView.as_view(), name="trader-detail"),
 ]
 
 # Default urlpatterns for this module (reports prefix)

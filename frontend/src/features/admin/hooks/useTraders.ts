@@ -95,7 +95,7 @@ export function useTraders(): UseTradersReturn {
       Object.entries(params).forEach(([k, v]) => {
         if (v !== undefined && v !== "") qs.set(k, String(v));
       });
-      const response = await api.get<TradersResponse>(`/api/traders?${qs.toString()}`);
+      const response = await api.get<TradersResponse>(`/api/traders/?${qs.toString()}`);
       setTraders(response.data.data);
       setTotal(response.data.pagination.total);
       setTotalPages(response.data.pagination.total_pages);
@@ -113,7 +113,8 @@ export function useTraders(): UseTradersReturn {
 
   const setFilters = (incoming: Partial<TraderFilters>) => {
     // If search is changing, debounce it; reset page for any filter change
-    if ("search" in incoming) {
+    const isPageChange = "page" in incoming && Object.keys(incoming).length === 1;
+    if ("search" in incoming && !isPageChange) {
       pendingSearch.current = incoming.search;
       if (searchTimer.current) clearTimeout(searchTimer.current);
       searchTimer.current = setTimeout(() => {
@@ -124,6 +125,8 @@ export function useTraders(): UseTradersReturn {
           page: 1,
         }));
       }, 300);
+    } else if (isPageChange) {
+      setFiltersState((prev) => ({ ...prev, page: incoming.page ?? 1 }));
     } else {
       setFiltersState((prev) => ({ ...prev, ...incoming, page: 1 }));
     }
@@ -155,7 +158,7 @@ export function useTraderDetail(traderId: string): UseTraderDetailReturn {
     setIsLoading(true);
     setError(null);
     api
-      .get<TraderDetailResponse>(`/api/traders/${traderId}`)
+      .get<TraderDetailResponse>(`/api/traders/${traderId}/`)
       .then((r) => setTrader(r.data.data))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load trader."))
       .finally(() => setIsLoading(false));

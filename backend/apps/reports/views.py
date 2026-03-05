@@ -56,6 +56,10 @@ class ReportsExportView(APIView):
     """GET /api/reports/export — returns a CSV file download."""
 
     permission_classes = [IsTaxAdmin]
+    # Disable DRF format suffix negotiation — this endpoint always returns CSV.
+    # Without this, ?format=csv triggers DRF content negotiation which 404s
+    # because there is no registered CSV renderer.
+    format_kwarg = None
 
     def get(self, request: Request):
         qs = ReportsExportQuerySerializer(data=request.query_params)

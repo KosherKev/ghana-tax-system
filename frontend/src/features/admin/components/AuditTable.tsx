@@ -84,9 +84,9 @@ export default function AuditTable({ logs, total, page, totalPages, isLoading, o
               logs.map((log) => (
                 <>
                   <tr
-                    key={log.log_id}
+                    key={log.event_id}
                     className="bg-white hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => setExpandedId(expandedId === log.log_id ? null : log.log_id)}
+                    onClick={() => setExpandedId(expandedId === log.event_id ? null : log.event_id)}
                   >
                     <td className="px-4 py-3 text-xs text-cu-muted whitespace-nowrap font-mono">
                       {formatDateTime(log.created_at)}
@@ -104,8 +104,8 @@ export default function AuditTable({ logs, total, page, totalPages, isLoading, o
                       {log.ip_address ?? "—"}
                     </td>
                   </tr>
-                  {expandedId === log.log_id && log.meta && (
-                    <tr key={`${log.log_id}-detail`} className="bg-gray-950">
+                  {expandedId === log.event_id && log.meta && (
+                    <tr key={`${log.event_id}-detail`} className="bg-gray-950">
                       <td colSpan={7} className="px-6 py-3">
                         <pre className="text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
                           {JSON.stringify(log.meta, null, 2)}

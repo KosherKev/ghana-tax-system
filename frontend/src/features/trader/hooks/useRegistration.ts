@@ -52,7 +52,7 @@ export function useRegistration(): UseRegistrationReturn {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.post<ApiResponse<RegistrationResult>>("/api/register", data);
+      const response = await api.post<ApiResponse<RegistrationResult>>("/api/register/", data);
       setResult({ ...response.data.data, phone_number: data.phone_number });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
@@ -67,7 +67,7 @@ export function useRegistration(): UseRegistrationReturn {
     setError(null);
     setTinLookupResult(null);
     try {
-      const response = await api.post<ApiResponse<TinLookupResult>>("/api/tin/lookup", {
+      const response = await api.post<ApiResponse<TinLookupResult>>("/api/tin/lookup/", {
         phone_number: phone,
       });
       setTinLookupResult(response.data.data);

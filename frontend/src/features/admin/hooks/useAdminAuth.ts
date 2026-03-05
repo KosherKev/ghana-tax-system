@@ -40,7 +40,7 @@ export function useAdminAuth(): UseAdminAuthReturn {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.post<LoginResponse>("/api/auth/login", payload);
+      const response = await api.post<LoginResponse>("/api/auth/login/", payload);
       const { access, refresh, role, admin_id, email } = response.data.data;
       setAuth({ accessToken: access, refreshToken: refresh, role, adminId: admin_id, email });
       navigate("/admin/dashboard", { replace: true });

@@ -34,7 +34,8 @@ export interface ReportSummaryData {
 }
 
 export interface AuditLog {
-  log_id: string;
+  event_id: string;   // actual API field name
+  log_id?: string;    // kept for backwards compat
   action: string;
   actor_id: string;
   actor_role: string;
@@ -44,6 +45,8 @@ export interface AuditLog {
   ip_address?: string;
   created_at: string;
   meta?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  before?: Record<string, unknown>;
 }
 
 interface AuditLogsResponse {
@@ -94,7 +97,7 @@ export function useReportSummary(): UseReportSummaryReturn {
     setError(null);
     try {
       const response = await api.get<ReportSummaryResponse>(
-        `/api/reports/summary?period=${period}`
+        `/api/reports/summary/?period=${period}`
       );
       setData(response.data.data);
     } catch (err) {
@@ -118,8 +121,10 @@ export function useExportCsv() {
   const exportCsv = async (filters: Record<string, string> = {}) => {
     setIsExporting(true);
     try {
-      const qs = new URLSearchParams({ format: "csv", ...filters });
-      const response = await api.get(`/api/reports/export?${qs.toString()}`, {
+      // Note: do NOT pass format=csv — DRF intercepts that param for content
+      // negotiation. The export endpoint always returns CSV unconditionally.
+      const qs = new URLSearchParams(filters);
+      const response = await api.get(`/api/reports/export/?${qs.toString()}`, {
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([response.data as BlobPart]));
@@ -171,7 +176,7 @@ export function useAuditLogs(): UseAuditLogsReturn {
       Object.entries(params).forEach(([k, v]) => {
         if (v !== undefined && v !== "") qs.set(k, String(v));
       });
-      const response = await api.get<AuditLogsResponse>(`/api/audit-logs?${qs.toString()}`);
+      const response = await api.get<AuditLogsResponse>(`/api/audit-logs/?${qs.toString()}`);
       setLogs(response.data.data);
       setTotal(response.data.pagination.total);
       setTotalPages(response.data.pagination.total_pages);
@@ -187,7 +192,13 @@ export function useAuditLogs(): UseAuditLogsReturn {
   }, [filters, fetchLogs]);
 
   const setFilters = (incoming: Partial<AuditFilters>) => {
-    setFiltersState((prev) => ({ ...prev, ...incoming, page: 1 }));
+    // Only reset to page 1 when a filter (not page itself) changes
+    const isPageChange = "page" in incoming && Object.keys(incoming).length === 1;
+    setFiltersState((prev) => ({
+      ...prev,
+      ...incoming,
+      page: isPageChange ? (incoming.page ?? 1) : 1,
+    }));
   };
 
   return {

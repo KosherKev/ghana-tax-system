@@ -6,6 +6,6 @@ from django.urls import path
 from apps.auth_app.views import AdminUserListCreateView, AdminUserDetailView
 
 urlpatterns = [
-    path("users", AdminUserListCreateView.as_view(), name="admin-users"),
-    path("users/<str:admin_id>", AdminUserDetailView.as_view(), name="admin-user-detail"),
+    path("users/", AdminUserListCreateView.as_view(), name="admin-users"),
+    path("users/<str:admin_id>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
 ]

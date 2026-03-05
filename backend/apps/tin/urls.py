@@ -6,5 +6,5 @@ from django.urls import path
 from apps.tin.views import TINLookupView
 
 urlpatterns = [
-    path("lookup", TINLookupView.as_view(), name="tin-lookup"),
+    path("lookup/", TINLookupView.as_view(), name="tin-lookup"),
 ]
