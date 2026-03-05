@@ -1,16 +1,21 @@
 """
 PyMongo connection singleton for ghana-tax-system.
-Full implementation in Phase 2. This stub provides the interface
-so all app modules can import from here without breaking.
+Provides a single MongoClient shared across the entire Django process,
+with retry-on-startup logic and a clean get_db() / get_collection() API.
 """
 
 import logging
+import time
 from typing import Optional
+
 from django.conf import settings
+from pymongo import MongoClient
+from pymongo.database import Database
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 logger = logging.getLogger(__name__)
 
-# Collection name constants — used across all repository classes
+# ── Collection name constants ─────────────────────────────────────────────────
 TRADERS = "traders"
 BUSINESSES = "businesses"
 LOCATIONS = "locations"
@@ -18,26 +23,60 @@ ADMINS = "admins"
 AUDIT_LOGS = "audit_logs"
 USSD_SESSIONS = "ussd_sessions"
 
-_client = None
-_db = None
+# ── Singleton holders ─────────────────────────────────────────────────────────
+_client: Optional[MongoClient] = None
+_db: Optional[Database] = None
+
+_MAX_RETRIES = 5
+_RETRY_DELAY_S = 2
 
 
-def get_client():
-    """Return the singleton MongoClient. Implemented fully in Phase 2."""
+def get_client() -> MongoClient:
+    """
+    Return the singleton MongoClient, creating it on first call.
+    Retries up to _MAX_RETRIES times with _RETRY_DELAY_S delay between attempts.
+    Raises RuntimeError if all retries are exhausted.
+    """
     global _client
-    if _client is None:
-        # Phase 2 will implement retry logic and proper error handling
+
+    if _client is not None:
+        return _client
+
+    uri = settings.MONGO_URI
+    last_exc: Exception = RuntimeError("Unknown error initialising MongoDB client")
+
+    for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            from pymongo import MongoClient
-            _client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
-            logger.info("MongoDB client initialized")
-        except Exception as exc:
-            logger.error("Failed to connect to MongoDB: %s", exc)
-            raise
-    return _client
+            client = MongoClient(
+                uri,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+                socketTimeoutMS=10000,
+            )
+            # Trigger an actual network round-trip to verify connectivity
+            client.admin.command("ping")
+            _client = client
+            logger.info("MongoDB connected (attempt %d/%d): %s", attempt, _MAX_RETRIES, uri)
+            return _client
+        except (ConnectionFailure, ServerSelectionTimeoutError) as exc:
+            last_exc = exc
+            logger.warning(
+                "MongoDB connection attempt %d/%d failed: %s — retrying in %ds",
+                attempt,
+                _MAX_RETRIES,
+                exc,
+                _RETRY_DELAY_S,
+            )
+            if attempt < _MAX_RETRIES:
+                time.sleep(_RETRY_DELAY_S)
+
+    raise RuntimeError(
+        f"Could not connect to MongoDB after {_MAX_RETRIES} attempts. "
+        f"Last error: {last_exc}"
+    ) from last_exc
 
 
-def get_db():
+def get_db() -> Database:
     """Return the primary database instance."""
     global _db
     if _db is None:
@@ -46,5 +85,15 @@ def get_db():
 
 
 def get_collection(name: str):
-    """Convenience helper — returns a named collection."""
+    """Convenience helper — returns a named collection from the primary database."""
     return get_db()[name]
+
+
+def close_client() -> None:
+    """Close the MongoClient (call during teardown / tests)."""
+    global _client, _db
+    if _client is not None:
+        _client.close()
+        _client = None
+        _db = None
+        logger.info("MongoDB client closed.")
