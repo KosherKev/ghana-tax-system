@@ -30,6 +30,45 @@
 
 ---
 
+### [PHASE 7] — Backend: Notifications Module + Full Test Suite
+**Date:** 2026-03-05
+**Agent:** Phase 7 Agent
+**Status:** ✅ Complete
+
+**Files Created:**
+
+- `backend/apps/notifications/providers/base.py` — `SMSProvider` abstract base class; declares `send_sms(phone, message) -> dict` returning `{success, message_id, error}`
+- `backend/apps/notifications/providers/stub.py` — `StubSMSProvider`: logs intent to `apps.notifications.providers.stub` logger, returns `stub-{uuid}` message IDs, no network calls; used in all environments without AT credentials
+- `backend/apps/notifications/providers/africas_talking.py` — `AfricasTalkingProvider`: sends via Africa's Talking REST API using `urllib.request` (no external HTTP deps); accepts AT_API_KEY + AT_USERNAME + optional AT_SENDER_ID from settings; HTTP 101 = success; auto-falls-back to `StubSMSProvider` if credentials are absent
+- `backend/apps/notifications/services.py` — `NotificationService`: `_build_provider()` selects `AfricasTalkingProvider` when `AT_API_KEY` is set, else `StubSMSProvider`; `send_tin_sms(phone, tin, name)` builds the registration confirmation message and delegates to provider; returns `{success, message_id}` or `{success: False, error}`
+- `backend/tests/__init__.py` — empty package marker
+- `backend/tests/conftest.py` — shared pytest fixtures: `test_db_name` (unique session UUID), `mongo_client` (session-scoped PyMongo client), `test_db` (autouse per-test — resets PyMongo singleton to test DB, clears all collections, flushes Redis DB 0 for session isolation), `sys_admin_doc` / `tax_admin_doc` (seeded admin documents), `sys_admin_token` / `tax_admin_token` (valid JWT access tokens), `sample_trader` (factory fixture), `client` (anonymous Django test client), `auth_client_tax` / `auth_client_sys` (pre-authenticated test clients)
+- `backend/tests/test_tin.py` — 11 tests: format validation (GH-TIN-[0-9A-F]{6}), uniqueness (100k draws, ≥99,500 distinct — birthday-problem aware), speed (1k TINs <5s), retry on collision, `TINGenerationError` after `MAX_RETRIES`, audit log on exhaustion, lookup found/not-found/name-masking
+- `backend/tests/test_registration.py` — 13 tests: service layer (web registration happy path + audit log + USSD channel tag + idempotent duplicate), endpoint layer (POST /api/register 201, validation 422 for invalid phone/missing name/missing location/invalid business_type, duplicate returns 200 with same TIN), TIN lookup endpoint (found, not-found 404, invalid phone 422)
+- `backend/tests/test_auth.py` — 15 tests: login success + wrong password 401 + unknown email 401 + inactive account 401; audit logs (LOGIN_SUCCESS / LOGIN_FAIL); token refresh; access token rejected as refresh; protected routes 401 without token; RBAC (TAX_ADMIN 403 on SYS_ADMIN endpoints, SYS_ADMIN can access audit logs); `/api/me` returns correct payload
+- `backend/tests/test_ussd.py` — 15 tests: unit tests (7 — mock `_session_store` via `patch` context manager so module state is always restored): initial main menu, option 1 → REG_NAME, invalid option, name too short, valid name → business type, invalid business type, help → END; endpoint tests (8 — real Redis, real MongoDB): initial menu, full 5-step registration flow creates trader, check TIN found, check TIN not found, session persists across requests (mid-flow state preserved), USSD registration appears in traders list, missing session_id 400, invalid input no crash
+- `backend/tests/test_reports.py` — 20 tests: summary totals/by_channel/by_business_type, traders list pagination/channel filter, trader detail found/not-found, CSV export (correct columns, row count, audit log written, channel filter applied), all report endpoints require auth, performance test (10k records <3s — skipped unless `RUN_PERF_TESTS=1`)
+
+**Files Modified:**
+
+- `backend/apps/registration/services.py` — replaced inline SMS stub with `NotificationService().send_tin_sms()`; added `normalise_phone` call (via `apps.ussd.validators`) so phone is always stored as `+233XXXXXXXXX` in both `register_trader_web` and `register_trader_ussd`; idempotency check in `register_trader_ussd` also normalises phone before lookup
+- `backend/apps/registration/views.py` — moved `@ratelimit` from method decorator to `@method_decorator(..., name="post")` on the class to fix DRF `Request` vs Django `HttpRequest` compatibility (ratelimit requires the Django WSGI request, not the DRF wrapper)
+- `backend/apps/tin/views.py` — same ratelimit fix: `@method_decorator(ratelimit(...), name="post")` on `TINLookupView`
+- `backend/apps/auth_app/repository.py` — added `{"_id": 0}` projection to `find_by_email` and `find_by_id` to prevent `ObjectId` JSON serialisation errors in `/api/auth/me`
+- `backend/core/settings.py` — added `django.contrib.auth` to `INSTALLED_APPS`; `django_ratelimit` introspects the `Permission` model at startup and requires the auth app to be installed
+- `backend/tests/test_ussd.py` — refactored `TestUSSDStateMachineUnit._make_sm_with_mock_store()` to use `unittest.mock.patch` context manager so `apps.ussd.state_machine._session_store` is always restored after each unit test (previously the mock leaked into endpoint tests, causing sessions to silently vanish mid-test)
+
+**Notes:**
+
+- **Test isolation strategy:** `test_db` autouse fixture uses a per-session unique DB name (`ghana_tax_test_{uuid4().hex[:8]}`), resets the PyMongo `_client`/`_db` singletons, clears all collections, and calls `r.flushdb()` on Redis DB 0 — ensuring USSD session keys never leak across tests.
+- **Phone normalisation:** registrations via both web and USSD now always store `+233XXXXXXXXX` in MongoDB regardless of input format. Callers may pass `0244...`, `233244...`, or `+233244...`; the service normalises before write.
+- **ratelimit + DRF:** `django_ratelimit.decorators.ratelimit` must be applied via `@method_decorator(..., name="dispatch|post")` on the class, not directly on the method, when using DRF `APIView`. Direct method decoration receives the DRF `Request` wrapper which lacks `.method` on the view class itself.
+- **_session_store mock leakage fix:** the root cause of 3 flaky USSD endpoint tests in the full suite was that `TestUSSDStateMachineUnit` mutated the module-level `apps.ussd.state_machine._session_store` and never restored it. Switching all 7 unit tests to `with patch("apps.ussd.state_machine._session_store") as mock_store:` ensures automatic teardown via `unittest.mock`'s context manager protocol.
+- **Test count:** 73 tests pass, 1 skipped (`test_reports_performance_10k` — requires `RUN_PERF_TESTS=1`), 0 failures. Suite is stable across ≥3 consecutive full runs.
+- **Git commits (8):** notifications base/stub/AT providers, NotificationService, registration service SMS + phone normalisation, ratelimit view fix, auth repository _id projection fix, settings django.contrib.auth, conftest, full test suite.
+
+---
+
 ### [PHASE 6] — Backend: Reports, Audit & Admin APIs
 **Date:** 2026-03-05
 **Agent:** Phase 6 Agent
