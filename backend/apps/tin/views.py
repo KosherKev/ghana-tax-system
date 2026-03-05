@@ -4,6 +4,7 @@ TIN views — POST /api/tin/lookup
 
 import logging
 
+from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework.views import APIView
 from rest_framework.request import Request
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 _tin_service = TINService()
 
 
+@method_decorator(ratelimit(key="ip", rate="5/m", method="POST", block=True), name="post")
 class TINLookupView(APIView):
     """
     POST /api/tin/lookup
@@ -27,7 +29,6 @@ class TINLookupView(APIView):
 
     permission_classes = [AllowAny]
 
-    @ratelimit(key="ip", rate="5/m", method="POST", block=True)
     def post(self, request: Request):
         serializer = TINLookupRequestSerializer(data=request.data)
         if not serializer.is_valid():

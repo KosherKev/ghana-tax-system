@@ -4,6 +4,7 @@ Registration views — POST /api/register
 
 import logging
 
+from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework.views import APIView
 from rest_framework.request import Request
@@ -26,6 +27,7 @@ def _get_ip(request: Request) -> str:
     return request.META.get("REMOTE_ADDR", "unknown")
 
 
+@method_decorator(ratelimit(key="ip", rate="20/m", method="POST", block=True), name="post")
 class RegisterTraderView(APIView):
     """
     POST /api/register
@@ -34,7 +36,6 @@ class RegisterTraderView(APIView):
 
     permission_classes = [AllowAny]
 
-    @ratelimit(key="ip", rate="20/m", method="POST", block=True)
     def post(self, request: Request):
         serializer = TraderRegistrationSerializer(data=request.data)
         if not serializer.is_valid():
