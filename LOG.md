@@ -30,6 +30,40 @@
 
 ---
 
+### [PHASE 3] — Backend: Auth Module (JWT + RBAC)
+**Date:** 2026-03-05
+**Agent:** Phase 3 Agent
+**Status:** ✅ Complete
+
+**Files Created:**
+- `backend/apps/auth_app/jwt_utils.py` — generate_access_token, generate_refresh_token, verify_token (with expected_type guard), get_token_from_request; custom TokenExpiredError and TokenInvalidError exceptions
+- `backend/apps/auth_app/permissions.py` — IsAdminAuthenticated, IsTaxAdmin, IsSysAdmin DRF permission classes; SYS_ADMIN is superset of TAX_ADMIN
+- `backend/apps/auth_app/serializers.py` — LoginSerializer, RefreshSerializer, CreateAdminSerializer, UpdateAdminSerializer
+- `backend/apps/auth_app/services.py` — AuthService: login (bcrypt verify + timing-attack safe), refresh_access_token, create_admin, update_admin (own-role guard), list_admins, get_me; all write audit logs
+
+**Files Modified:**
+- `backend/apps/auth_app/authentication.py` — Full JWTAuthentication DRF backend (replaces Phase 1 stub): verifies Bearer token, loads admin from DB, checks is_active, attaches request.admin
+- `backend/apps/auth_app/views.py` — LoginView (rate 10/m), RefreshView (rate 20/m), MeView, AdminUserListCreateView (GET+POST), AdminUserDetailView (PATCH)
+- `backend/apps/auth_app/urls.py` — /api/auth/login, /api/auth/refresh, /api/auth/me
+- `backend/apps/auth_app/admin_urls.py` — /api/admin/users, /api/admin/users/<admin_id>
+- `backend/core/middleware/audit_middleware.py` — Full implementation: X-Forwarded-For aware IP extraction, user_agent truncated to 512 chars, attached to every request
+- `backend/core/settings.py` — Fixed INSTALLED_APPS: 'ratelimit' → 'django_ratelimit'
+
+**Git Commits:**
+- feat(auth): implement JWT utilities, JWTAuthentication backend, and RBAC permission classes
+- feat(auth): implement AuthService, serializers, views and URL config for all auth endpoints
+- fix(settings): correct INSTALLED_APPS entry from 'ratelimit' to 'django_ratelimit'
+
+**Notes:**
+- 15/15 unit assertions pass (Django setup, JWT round-trips, serializer validation, permission class logic).
+- login() always runs bcrypt.checkpw even on unknown email to prevent timing-based user enumeration.
+- verify_token() accepts optional expected_type — prevents refresh tokens being used as access tokens.
+- JWTAuthentication returns None (not raises) when no Authorization header present, allowing AllowAny endpoints to work.
+- Views import `created_response` from core.utils.response — confirmed present from Phase 1.
+
+
+---
+
 ### [PHASE 2] — MongoDB Data Layer & Seed Script
 **Date:** 2026-03-05
 **Agent:** Phase 2 Agent
