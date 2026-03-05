@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CU Portal Design Token Variables ─────────────────────────────────────── */
+:root {
+  --cu-red: #8a1020;
+  --cu-red-dark: #640b15;
+  --cu-red-light: #b91c35;
+  --cu-white: #ffffff;
+  --cu-bg: #f5f6f8;
+  --cu-border: #e5e7eb;
+  --cu-text: #111827;
+  --cu-text-muted: #6b7280;
+  --cu-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Base resets ────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--cu-bg);
+  color: var(--cu-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Focus styles (accessibility) ──────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--cu-red);
+  outline-offset: 2px;
+}
+
+/* ── Portal header strip ────────────────────────────────────────────────────── */
+.portal-header {
+  background-color: var(--cu-red);
+  color: var(--cu-white);
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────────────── */
+.cu-card {
+  background: var(--cu-white);
+  border: 1px solid var(--cu-border);
+  border-radius: 0.5rem;
+  box-shadow: var(--cu-shadow);
+}
+
+.cu-btn-primary {
+  background-color: var(--cu-red);
+  color: var(--cu-white);
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.625rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.cu-btn-primary:hover {
+  background-color: var(--cu-red-dark);
+}
+
+.cu-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
