@@ -1,1 +1,39 @@
-/** Spinner — stub. Full implementation in Phase 8. */ export default function Spinner(_props: Record<string, unknown>) { return null; }
+export interface SpinnerProps {
+  size?: "sm" | "md" | "lg";
+  color?: "red" | "white" | "gray";
+  className?: string;
+}
+
+const sizeMap = { sm: "h-4 w-4", md: "h-6 w-6", lg: "h-8 w-8" };
+const colorMap = {
+  red: "text-cu-red",
+  white: "text-white",
+  gray: "text-gray-400",
+};
+
+export default function Spinner({ size = "md", color = "red", className = "" }: SpinnerProps) {
+  return (
+    <svg
+      className={`animate-spin ${sizeMap[size]} ${colorMap[color]} ${className}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-label="Loading"
+      role="status"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
+  );
+}
