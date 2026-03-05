@@ -30,6 +30,39 @@
 
 ---
 
+### [PHASE 2] — MongoDB Data Layer & Seed Script
+**Date:** 2026-03-05
+**Agent:** Phase 2 Agent
+**Status:** ✅ Complete
+
+**Files Modified:**
+- `backend/core/utils/mongo.py` — Full implementation: singleton MongoClient with 5-retry logic, ping health-check, get_db(), get_collection(), close_client(), collection name constants
+
+**Files Created:**
+- `backend/apps/auth_app/repository.py` — AdminRepository: find_by_email, find_by_id, list_all, create, update, update_last_login
+- `backend/apps/registration/repository.py` — TraderRepository, BusinessRepository, LocationRepository with full filter query builders
+- `backend/apps/tin/repository.py` — TINRepository: exists(), reserve() using atomic upsert
+- `backend/apps/reports/repository.py` — ReportsRepository: kpi_totals, summary_by_channel/location/business_type, daily_registrations, export_traders_csv (all aggregation pipelines)
+- `backend/apps/audit/repository.py` — AuditRepository: log() (fire-and-forget), list_with_filters
+- `backend/apps/ussd/session_store.py` — USSDSessionStore: Redis-first with automatic MongoDB fallback, TTL-aware
+- `backend/management/commands/seed_demo_data.py` — Full idempotent seed: 3 admins, 10 locations, 100 traders, 200+ audit logs
+
+**Git Commits:**
+- feat(mongo): implement PyMongo singleton with retry logic and collection name constants
+- feat(repository): implement AdminRepository, TraderRepository, BusinessRepository, LocationRepository
+- feat(repository): implement TINRepository, ReportsRepository, AuditRepository, USSDSessionStore
+- feat(seed): implement seed_demo_data command — 3 admins, 10 locations, 100 traders, 200+ audit logs
+
+**Notes:**
+- All 71 Python files verified to compile cleanly.
+- AuditRepository.log() swallows exceptions so audit failures never interrupt primary flows.
+- USSDSessionStore tries Redis first; falls back to MongoDB ussd_sessions silently.
+- ReportsRepository uses only aggregation pipelines — no Python-level loops.
+- Seed is fully idempotent — safe to run multiple times.
+
+
+---
+
 ### [PHASE 1] — Project Scaffold & Infrastructure
 **Date:** 2026-03-05
 **Agent:** Phase 1 Agent
